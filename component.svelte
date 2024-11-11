@@ -1,5 +1,5 @@
 <script lang="ts">
-	const items = ["Hello", "All you people", "what", "are"];
+	let { submit, items }: { submit: Function; items: string[] } = $props();
 
 	let selected = $state([]);
 </script>
@@ -16,4 +16,5 @@
 			{item}
 		</label>
 	{/each}
+	<button onclick={() => submit(selected)}>Submit</button>
 </div>

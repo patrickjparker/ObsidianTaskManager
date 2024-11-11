@@ -33,6 +33,12 @@ const addTaskToDate = async (editor: Editor, date: moment.Moment) => {
 	file.vault.append(file, task + '\n')
 }
 
+const getTasksInFile = (editor: Editor): string[] => {
+	const regex = /^\s*- \[ \]/;
+	const lines = Array(editor.lineCount()).fill(null).map((_, i) => editor.getLine(i))
+	return lines.filter(line => line && regex.test(line))
+}
+
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 
@@ -77,22 +83,17 @@ export default class MyPlugin extends Plugin {
 
 		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-svelte-modal-simple',
-			name: 'Open Svelte modal',
-			callback: () => {
-				new SvelteModal(this.app).open();
+			id: 'select-tasks-in-file',
+			name: 'Select Tasks in File',
+			editorCallback: async (editor: Editor) => {
+				const tasks = getTasksInFile(editor);
+				const items: string[] = await new Promise((resolve, reject) => {
+					new SvelteModal(this.app, resolve, tasks).open();
+				})
+				console.log(`Here with ${items}`)
 			}
 		});
 
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
 		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
 			id: 'open-sample-modal-complex',
@@ -157,17 +158,29 @@ class SampleModal extends Modal {
 
 import { mount, unmount } from 'svelte'
 import Component from './component.svelte'
+type SubmitFuc = (list: string[]) => void;
 
 class SvelteModal extends Modal {
 	component: any
+	submit: SubmitFuc
+	items: string[]
 
-	constructor(app: App) {
+	constructor(app: App, submit: SubmitFuc, items: string[]) {
 		super(app);
+		this.submit = (list: string[]) => {
+			submit(list)
+			this.close();
+		}
+		this.items = items;
 	}
 
 	onOpen() {
 		this.component = mount(Component, {
-			target: this.contentEl
+			target: this.contentEl,
+			props: {
+				submit: this.submit,
+				items: this.items
+			}
 		})
 	}
 
