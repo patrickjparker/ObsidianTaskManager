@@ -1,16 +1,7 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, Modal, Plugin } from 'obsidian';
+import moment from 'moment'
 
 import { createDailyNote, getAllDailyNotes, getDailyNote } from 'obsidian-daily-notes-interface';
-
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
-}
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
 
 // Copy text (selected or line under cursor) to daily note
 const addTaskToDate = async (editor: Editor, date: moment.Moment) => {
@@ -23,6 +14,10 @@ const addTaskToDate = async (editor: Editor, date: moment.Moment) => {
 		task = editor.getLine(cursor.line)
 	}
 
+	addLinesToDate([task], date);
+}
+
+const addLinesToDate = async (tasks: string[], date: moment.Moment) => {
 	// Get daily note
 	let notes = getAllDailyNotes();
 	let file = getDailyNote(date, notes);
@@ -30,7 +25,9 @@ const addTaskToDate = async (editor: Editor, date: moment.Moment) => {
 		file = await createDailyNote(date);
 	}
 
-	file.vault.append(file, task + '\n')
+	for (let task of tasks) {
+		file.vault.append(file, task + '\n')
+	}
 }
 
 const getTasksInFile = (editor: Editor): string[] => {
@@ -39,12 +36,17 @@ const getTasksInFile = (editor: Editor): string[] => {
 	return lines.filter(line => line && regex.test(line))
 }
 
+const selectTasksInFile = (editor: Editor, app: App): Promise<string[]> => {
+	const tasks = getTasksInFile(editor);
+	// TODO: Don't open editor if there are no tasks
+	return new Promise((resolve, _) => {
+		new SvelteModal(app, resolve, tasks).open();
+	})
+}
+
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
 
 	async onload() {
-		await this.loadSettings();
-
 
 		this.addCommand({
 			id: 'add-task-today',
@@ -58,106 +60,36 @@ export default class MyPlugin extends Plugin {
 			editorCallback: (editor: Editor) => addTaskToDate(editor, moment().add(1, "day")),
 		});
 
-		// Tutorial stuff after this
-
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
+		// Take tasks from a file and add to a daily note
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'select-tasks-in-file',
-			name: 'Select Tasks in File',
+			id: 'select-tasks-in-file-for-today',
+			name: 'Select Tasks for Today',
 			editorCallback: async (editor: Editor) => {
-				const tasks = getTasksInFile(editor);
-				const items: string[] = await new Promise((resolve, reject) => {
-					new SvelteModal(this.app, resolve, tasks).open();
-				})
-				console.log(`Here with ${items}`)
+				const tasks = await selectTasksInFile(editor, this.app);
+				addLinesToDate(tasks, moment());
 			}
 		});
 
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
+			id: 'select-tasks-in-file-for-tomorrow',
+			name: 'Select Tasks for Tomorrow',
+			editorCallback: async (editor: Editor) => {
+				const tasks = await selectTasksInFile(editor, this.app);
+				addLinesToDate(tasks, moment());
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 	onunload() {
 
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
 }
 
 import { mount, unmount } from 'svelte'
 import Component from './component.svelte'
+
 type SubmitFuc = (list: string[]) => void;
 
 class SvelteModal extends Modal {
@@ -188,31 +120,5 @@ class SvelteModal extends Modal {
 		if (this.component) {
 			unmount(this.component)
 		}
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
 	}
 }
