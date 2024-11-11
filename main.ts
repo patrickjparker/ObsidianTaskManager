@@ -74,6 +74,16 @@ export default class MyPlugin extends Plugin {
 				new SampleModal(this.app).open();
 			}
 		});
+
+		// This adds a simple command that can be triggered anywhere
+		this.addCommand({
+			id: 'open-svelte-modal-simple',
+			name: 'Open Svelte modal',
+			callback: () => {
+				new SvelteModal(this.app).open();
+			}
+		});
+
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: 'sample-editor-command',
@@ -142,6 +152,29 @@ class SampleModal extends Modal {
 	onClose() {
 		const { contentEl } = this;
 		contentEl.empty();
+	}
+}
+
+import { mount, unmount } from 'svelte'
+import Component from './component.svelte'
+
+class SvelteModal extends Modal {
+	component: any
+
+	constructor(app: App) {
+		super(app);
+	}
+
+	onOpen() {
+		this.component = mount(Component, {
+			target: this.contentEl
+		})
+	}
+
+	onClose() {
+		if (this.component) {
+			unmount(this.component)
+		}
 	}
 }
 
