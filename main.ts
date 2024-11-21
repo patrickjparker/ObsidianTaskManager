@@ -1,4 +1,4 @@
-import { App, Editor, Modal, Plugin } from 'obsidian';
+import { App, Editor, Modal, Notice, Plugin } from 'obsidian';
 import moment from 'moment'
 
 import { createDailyNote, getAllDailyNotes, getDailyNote } from 'obsidian-daily-notes-interface';
@@ -36,11 +36,14 @@ const getTasksInFile = (editor: Editor): string[] => {
 	return lines.filter(line => line && regex.test(line))
 }
 
-const selectTasksInFile = (editor: Editor, app: App): Promise<string[]> => {
+const selectTasksInFile = (editor: Editor, app: App, target: string): Promise<string[]> => {
 	const tasks = getTasksInFile(editor);
-	// TODO: Don't open editor if there are no tasks
+	if (tasks.length === 0) {
+		new Notice("There are no tasks in this file")
+		return Promise.resolve([]);
+	}
 	return new Promise((resolve, _) => {
-		new SvelteModal(app, resolve, tasks).open();
+		new SvelteModal(app, resolve, tasks, target).open();
 	})
 }
 
@@ -65,8 +68,10 @@ export default class MyPlugin extends Plugin {
 			id: 'select-tasks-in-file-for-today',
 			name: 'Select Tasks for Today',
 			editorCallback: async (editor: Editor) => {
-				const tasks = await selectTasksInFile(editor, this.app);
-				addLinesToDate(tasks, moment());
+				const tasks = await selectTasksInFile(editor, this.app, "today's tasks");
+				if (tasks.length > 0) {
+					addLinesToDate(tasks, moment());
+				}
 			}
 		});
 
@@ -74,8 +79,10 @@ export default class MyPlugin extends Plugin {
 			id: 'select-tasks-in-file-for-tomorrow',
 			name: 'Select Tasks for Tomorrow',
 			editorCallback: async (editor: Editor) => {
-				const tasks = await selectTasksInFile(editor, this.app);
-				addLinesToDate(tasks, moment());
+				const tasks = await selectTasksInFile(editor, this.app, "tomorrow's tasks");
+				if (tasks.length > 0) {
+					addLinesToDate(tasks, moment());
+				}
 			}
 		});
 
@@ -96,14 +103,16 @@ class SvelteModal extends Modal {
 	component: any
 	submit: SubmitFuc
 	items: string[]
+	target: string
 
-	constructor(app: App, submit: SubmitFuc, items: string[]) {
+	constructor(app: App, submit: SubmitFuc, items: string[], target: string) {
 		super(app);
 		this.submit = (list: string[]) => {
 			submit(list)
 			this.close();
 		}
 		this.items = items;
+		this.target = target;
 	}
 
 	onOpen() {
@@ -111,7 +120,8 @@ class SvelteModal extends Modal {
 			target: this.contentEl,
 			props: {
 				submit: this.submit,
-				items: this.items
+				items: this.items,
+				target: this.target
 			}
 		})
 	}
